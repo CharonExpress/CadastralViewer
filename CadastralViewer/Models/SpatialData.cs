@@ -3,10 +3,15 @@ using NetTopologySuite.Features;
 using NetTopologySuite.Utilities;
 using System.Xml;
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace CadastralViewer.Models;
 public class SpatialData
 {
+    /// <summary>
+    /// https://stackoverflow.com/questions/19167669/keep-only-numeric-value-from-a-string
+    /// </summary>
+    private static readonly Regex rxNonDigits = new Regex(@"[^\d]+");
 
     public List<Tuple<FeatureCollection, string>> TitledFeatureCollections;
 
@@ -58,7 +63,7 @@ public class SpatialData
 
     private List<EntitySpatial> GetEntitySpatials(XmlDocument xmlDocument)
     {
-        XmlNodeList? nodeList = xmlDocument.SelectNodes(".//EntitySpatial|.//Entity_Spatial");
+        XmlNodeList? nodeList = xmlDocument.SelectNodes(".//EntitySpatial|.//Entity_Spatial|.//entity_spatial|.//*[local-name() = 'EntitySpatial']");
 
         if (nodeList == null) throw new Exception("Cannot get entity spatial nodes");
 
@@ -79,7 +84,7 @@ public class SpatialData
 
     private List<SpatialElement> GetSpatialElements(XmlNode xmlNode)
     {
-        XmlNodeList? elementNodes = xmlNode.SelectNodes(".//SpatialElement|.//Spatial_Element");
+        XmlNodeList? elementNodes = xmlNode.SelectNodes(".//SpatialElement|.//Spatial_Element|.//spatials_elements|.//*[local-name() = 'SpatialElement']");
 
         if (elementNodes == null) throw new Exception("Cannot get spatial elements nodes");
 
@@ -95,7 +100,7 @@ public class SpatialData
 
     private List<SpelementUnit> GetSpelementUnits(XmlNode xmlNode)
     {
-        XmlNodeList? nodeList = xmlNode.SelectNodes(".//SpelementUnit|.//Spelement_Unit");
+        XmlNodeList? nodeList = xmlNode.SelectNodes(".//SpelementUnit|.//Spelement_Unit|.//ordinate|.//*[local-name() = 'SpelementUnit']");
 
         if (nodeList == null) throw new Exception("Cannot get spelement units nodes");
 
@@ -120,25 +125,35 @@ public class SpatialData
     /// <exception cref="Exception">X or Y value is missing</exception>
     private Ordinate GetOrdinate(XmlNode xmlNode, int pointNumber = 0)
     {
-        XmlNode? node = xmlNode.SelectSingleNode(".//Ordinate|.//NewOrdinate|.//New_Ordinate");
+        XmlNode? node = xmlNode.SelectSingleNode(".//Ordinate|.//NewOrdinate|.//New_Ordinate|.//*[local-name() = 'Ordinate']");
 
-        if (node == null) throw new NullReferenceException("Coordinate data node is missing");
+        if (node == null) node = xmlNode;
 
-        XmlNode? xNode = node.SelectSingleNode("@X");
-        XmlNode? yNode = node.SelectSingleNode("@Y");
+        XmlNode? xNode = node.SelectSingleNode("@X|x");
+        XmlNode? yNode = node.SelectSingleNode("@Y|y");
 
-        if (xNode == null || yNode == null ||
-            xNode.Value == null || yNode.Value == null) throw new Exception("X or Y node is missing");
+        if (xNode == null || yNode == null) 
+            throw new Exception("X or Y node is missing");
 
-        XmlNode? numberNode = node.SelectSingleNode("@NumGeopoint|@Num_Geopoint");
+        string xValue = xNode.Value ?? xNode.InnerText;
+        string yValue = yNode.Value ?? yNode.InnerText;
+
+        if (xValue == null || yValue == null) 
+            throw new Exception("X or Y node is missing");
+        
+
+        XmlNode? numberNode = node.SelectSingleNode("@NumGeopoint|@Num_Geopoint|ord_nmb|num_geopoint|@SuNmb");
+
+        string? numberStringValue = numberNode?.Value ?? numberNode?.InnerText;
+        int xmlPointNumber = (numberStringValue != null &&
+            string.IsNullOrWhiteSpace(rxNonDigits.Replace(numberStringValue, ""))) ? 
+            int.Parse(rxNonDigits.Replace(numberStringValue, "")) : pointNumber;
 
         Ordinate ordinate = new Ordinate()
         {
-            X = double.Parse(xNode.Value.ToString(), CultureInfo.InvariantCulture),
-            Y = double.Parse(yNode.Value.ToString(), CultureInfo.InvariantCulture),
-
-            PointNumber = numberNode?.Value != null ?
-            int.Parse(numberNode.Value.ToString()) : pointNumber
+            X = double.Parse(xValue, CultureInfo.InvariantCulture),
+            Y = double.Parse(yValue, CultureInfo.InvariantCulture),
+            PointNumber = xmlPointNumber
         };
 
         XmlNode? radiusNode = node.SelectSingleNode("@Radius");

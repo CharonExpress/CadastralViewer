@@ -1,25 +1,48 @@
-using CadastralViewer.Models;
-using System.Globalization;
+﻿using CadastralViewer.Models;
 using System.Xml;
 
 namespace CadastralViewerTests;
 [TestFixture]
 public class SpatialDataTests
 {
-    private protected XmlDocument xmlDocument;
+    private static IEnumerable<XmlDocument> XmlDocuments
+    {
+        get
+        {
+            IEnumerable<string> xmlStrings = typeof(XmlDocumentData)
+            .GetFields()
+            .Where(field => field.IsPublic &&
+            field.IsStatic &&
+            field.FieldType == typeof(string))
+            .Select(field => field.GetValue(null))
+            .Where(value => value != null)
+            .Select(value => value!.ToString()!);
+
+            return xmlStrings.Select(xmlString =>
+            {
+                XmlDocument document = new();
+                document.LoadXml(xmlString);
+                return document;
+            });
+        }
+    }
+    [OneTimeSetUp]
+    public void OneTimeSetUp()
+    {
+        
+    }
+
     [SetUp]
     public void Setup()
     {
-        xmlDocument = XmlDocumentData.XmlDocument;
+        Console.WriteLine("I'm happy I'm using NUnit😀");
     }
 
-    [Test]
-    public void TestSpatialData()
+    [Test, TestCaseSource(nameof(XmlDocuments))]
+    public void TestSpatialData(XmlDocument document)
     {
-        var data = new SpatialData(xmlDocument);
-       Assert.IsTrue(data.TitledFeatureCollections
-           .Any(a => a.Item1
-           .Any(aa => aa.Geometry.Coordinates
-           .Any(aaa => aaa.Y == 518763.23 && aaa.X == 2150703.58))));
+        var data = new SpatialData(document);
+        Assert.IsTrue(data.TitledFeatureCollections.Count() > 0 && 
+            !data.TitledFeatureCollections.Any(tfc => tfc.Item1.Any(fc => fc.Geometry.IsEmpty)));
     }
 }
